@@ -1,0 +1,193 @@
+package ch.replay.app;
+
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.ContentValues;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.MediaStore;
+import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import androidx.core.content.FileProvider;
+import androidx.webkit.WebViewAssetLoader;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+
+public class MainActivity extends Activity {
+
+    private static final String START_URL = "https://appassets.androidplatform.net/assets/www/index.html";
+    private static final int REQ_FILE = 42;
+
+    private WebView web;
+    private ValueCallback<Uri[]> fileCallback;
+    private Uri cameraUri;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        web = new WebView(this);
+        setContentView(web);
+
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(false);
+        s.setAllowContentAccess(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
+
+        final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return loader.shouldInterceptRequest(request.getUrl());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri u = request.getUrl();
+                if ("appassets.androidplatform.net".equals(u.getHost())) return false;
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, u));
+                } catch (ActivityNotFoundException ignored) { }
+                return true;
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if (fileCallback != null) fileCallback.onReceiveValue(null);
+                fileCallback = callback;
+                cameraUri = null;
+
+                Intent pick = params.createIntent();
+                Intent toLaunch;
+
+                if (acceptsImages(params.getAcceptTypes())) {
+                    Intent camera = cameraIntent();
+                    if (params.isCaptureEnabled() && camera != null) {
+                        toLaunch = camera;
+                    } else {
+                        toLaunch = Intent.createChooser(pick, "Choisir une image");
+                        if (camera != null) toLaunch.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+                    }
+                } else {
+                    toLaunch = Intent.createChooser(pick, "Choisir un fichier");
+                }
+
+                try {
+                    startActivityForResult(toLaunch, REQ_FILE);
+                } catch (ActivityNotFoundException e) {
+                    fileCallback.onReceiveValue(null);
+                    fileCallback = null;
+                    return false;
+                }
+                return true;
+            }
+        });
+
+        web.addJavascriptInterface(new Bridge(), "AndroidBridge");
+
+        if (savedInstanceState != null) {
+            web.restoreState(savedInstanceState);
+        } else {
+            web.loadUrl(START_URL);
+        }
+    }
+
+    private static boolean acceptsImages(String[] types) {
+        if (types == null || types.length == 0) return false;
+        for (String t : types) {
+            if (t != null && t.startsWith("image")) return true;
+        }
+        return false;
+    }
+
+    private Intent cameraIntent() {
+        try {
+            File dir = new File(getCacheDir(), "camera");
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File photo = File.createTempFile("photo_", ".jpg", dir);
+            cameraUri = FileProvider.getUriForFile(this, getPackageName() + ".files", photo);
+            Intent cam = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            cam.putExtra(MediaStore.EXTRA_OUTPUT, cameraUri);
+            cam.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            return cam;
+        } catch (IOException | IllegalArgumentException e) {
+            cameraUri = null;
+            return null;
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_FILE || fileCallback == null) return;
+
+        Uri[] result = null;
+        if (resultCode == RESULT_OK) {
+            boolean hasPicked = data != null && (data.getData() != null || data.getClipData() != null);
+            if (hasPicked) {
+                result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            } else if (cameraUri != null) {
+                result = new Uri[]{cameraUri};
+            }
+        }
+        fileCallback.onReceiveValue(result);
+        fileCallback = null;
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        web.evaluateJavascript("(window.__back && window.__back()) || false", value -> {
+            if (!"true".equals(value)) MainActivity.super.onBackPressed();
+        });
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        web.saveState(outState);
+    }
+
+    /** Lets the page save a backup file into Downloads. */
+    public class Bridge {
+        @JavascriptInterface
+        public boolean saveFile(String name, String content) {
+            try {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                cv.put(MediaStore.Downloads.MIME_TYPE, "application/json");
+                cv.put(MediaStore.Downloads.IS_PENDING, 1);
+                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (uri == null) return false;
+                try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    if (os == null) return false;
+                    os.write(content.getBytes(StandardCharsets.UTF_8));
+                }
+                cv.clear();
+                cv.put(MediaStore.Downloads.IS_PENDING, 0);
+                getContentResolver().update(uri, cv, null, null);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+    }
+}
