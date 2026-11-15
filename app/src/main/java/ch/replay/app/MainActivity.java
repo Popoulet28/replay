@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -32,6 +33,8 @@ public class MainActivity extends Activity {
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
+    private OutputStream pendingOut;
+    private Uri pendingUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -166,8 +169,52 @@ public class MainActivity extends Activity {
         web.saveState(outState);
     }
 
-    /** Lets the page save a backup file into Downloads. */
+    /** Lets the page save files (backups, PDF exports) into Downloads. */
     public class Bridge {
+        @JavascriptInterface
+        public synchronized boolean beginFile(String name, String mime) {
+            try {
+                if (pendingOut != null) { try { pendingOut.close(); } catch (Exception ignored) { } pendingOut = null; }
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                cv.put(MediaStore.Downloads.MIME_TYPE, mime);
+                cv.put(MediaStore.Downloads.IS_PENDING, 1);
+                pendingUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (pendingUri == null) return false;
+                pendingOut = getContentResolver().openOutputStream(pendingUri);
+                return pendingOut != null;
+            } catch (Exception e) {
+                pendingOut = null;
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public synchronized boolean appendBase64(String chunk) {
+            if (pendingOut == null) return false;
+            try {
+                pendingOut.write(Base64.decode(chunk, Base64.DEFAULT));
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public synchronized boolean endFile() {
+            if (pendingOut == null || pendingUri == null) return false;
+            try {
+                pendingOut.close();
+                pendingOut = null;
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Downloads.IS_PENDING, 0);
+                getContentResolver().update(pendingUri, cv, null, null);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
         @JavascriptInterface
         public boolean saveFile(String name, String content) {
             try {
