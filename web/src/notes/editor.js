@@ -1,7 +1,23 @@
+import { clone, el, today, uid } from '../core/helpers.js';
+import { recompress, storeImage } from '../core/images.js';
+import { S, courses } from '../core/state.js';
+import { saveProblem } from '../core/storage.js';
+import { xpToast } from '../game/game.js';
+import { exportNotePdf, promptBox } from './files.js';
+import { drawStroke, hitStroke, outlinePoints, pointInPoly, polyPath, recognizeShape, shapeToPts, splitStroke, strokeBox } from './geometry.js';
+import { TEXT_FONTS, itemBox, textBox, unionBox } from './objects.js';
+import { pdfToPages } from './pdf.js';
+import { ER_SIZES, HL_COLORS, HL_SIZES, PENS, PEN_COLORS, PEN_SIZES, inkPrefs, inkPrefsChanged } from './prefs.js';
+import { STAMP, drawScene, renderRegion } from './scene.js';
+import { NB, nbCourseOf, nbCreate, nbDel, nbForget, nbGet, nbInit, nbPut, nbSaveNode, putBlob } from './store.js';
+import { PAGE_GAP, TPLS, drawTpl } from './templates.js';
+import { newSrs } from '../srs/schedule.js';
+import { buzz, confirmBox, modal, render, toast } from '../ui/chrome.js';
+
 /* =====================================================================
    Cours v2 — éditeur (partie 2)
    ===================================================================== */
-const ICONS={
+export const ICONS={
   back:'M15 5l-7 7 7 7', pen:'M4 20l4-1L19 8l-3-3L5 16l-1 4zM14 7l3 3', hl:'M4.5 20h7M7 16.5l8.5-11 4 3.2-8.5 11H7z',
   eraser:'M4 15.5 13.5 6l5 5L9 20.5H6.5zM9 20.5h11', lasso:'M12 4c4.4 0 8 2.2 8 5s-3.6 5-8 5-8-2.2-8-5 3.6-5 8-5zM7 13c-1.4 2.2-.2 4.5 2.4 4.5 2.2 0 2.6 1.6 1.6 3.5',
   shape:'M4 20h8l-4-7.5zM14 4h6v6h-6zM14 17a3 3 0 1 0 6 0 3 3 0 1 0-6 0', text:'M5 7V4h14v3M12 4v16M9 20h6',
@@ -14,13 +30,13 @@ const ICONS={
   image:'M4 5h16v14H4zM4 16l5-5 4 4 2.5-2.5L20 17M15.5 8.5h.01', camera:'M4 8h3.5L9 5.5h6L16.5 8H20v11H4zM12 10.5a3 3 0 1 0 0 6 3 3 0 1 0 0-6z',
   pdf:'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 16.5h4', page:'M7 3h7l4 4v14H7zM14 3v4h4', paste:'M9 4h6v3H9zM7 5.5H5.5V21h13V5.5H17'
 };
-function icon(name, extra){
+export function icon(name, extra){
   const NS='http://www.w3.org/2000/svg', svg=document.createElementNS(NS,'svg');
   svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true'); svg.setAttribute('class','ic'+(extra?' '+extra:''));
   const p=document.createElementNS(NS,'path'); p.setAttribute('d',ICONS[name]||''); p.setAttribute('fill','none'); p.setAttribute('stroke','currentColor');
   p.setAttribute('stroke-width', name==='more'?'3.2':'1.8'); p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round'); svg.append(p); return svg;
 }
-function normalizeDoc(d){
+export function normalizeDoc(d){
   d=d||{};
   const out={v:2, mode:d.mode||'infinite', tpl:d.tpl||'blank', strokes:[], items:[], view:d.view||null};
   for(const st of (d.strokes||[])){
@@ -33,21 +49,21 @@ function normalizeDoc(d){
   }
   return out;
 }
-function newPage(tpl, orient){ const land=orient==='land'; return {id:uid(), kind:'page', x:land?-207:0, y:0, w:land?1414:1000, h:land?1000:1414, tpl:tpl||'grid'}; }
-async function createNote(parent, name, o){
+export function newPage(tpl, orient){ const land=orient==='land'; return {id:uid(), kind:'page', x:land?-207:0, y:0, w:land?1414:1000, h:land?1000:1414, tpl:tpl||'grid'}; }
+export async function createNote(parent, name, o){
   o=o||{};
   const n=await nbCreate('note',parent,name,{mode:o.mode||'pages', cover:o.cover||null, fav:false});
   const doc={v:2, mode:o.mode||'pages', tpl:o.tpl||'grid', strokes:[], items:[], view:null};
   if(doc.mode==='pages' && !o.noPage){ const pg=newPage(o.tpl||'grid', o.orient); doc.items.push(pg); }
   await nbPut('docs',doc,n.id); return n;
 }
-async function openNote(id, focus){
+export async function openNote(id, focus){
   await nbInit(); const node=NB.nodes.get(id); if(!node) return;
   const doc=normalizeDoc(await nbGet('docs',id));
   const ed=makeEditor(node, doc, focus);
   document.getElementById('layer').append(ed.root); NB.editor=ed; ed.start();
 }
-async function sendRegionToReplay(node, scene, rect){
+export async function sendRegionToReplay(node, scene, rect){
   const blob=await renderRegion(scene, rect, 1400, {noStamps:true});
   const ref=await storeImage(blob);
   const course=nbCourseOf(node)||courses()[0];
@@ -56,9 +72,9 @@ async function sendRegionToReplay(node, scene, rect){
   await saveProblem(p);
   toast('Ajouté à ton carnet · +10 XP');
 }
-function stampRect(s){ return s.t==='f'||s.stamp==='f' ? {x:s.x-40,y:s.y-130,w:900,h:300} : {x:s.x-60,y:s.y-170,w:1000,h:380}; }
+export function stampRect(s){ return s.t==='f'||s.stamp==='f' ? {x:s.x-40,y:s.y-130,w:900,h:300} : {x:s.x-60,y:s.y-170,w:1000,h:380}; }
 
-function makeEditor(node, doc, focus){
+export function makeEditor(node, doc, focus){
   const P=inkPrefs();
   const mode=doc.mode;
   let strokes=doc.strokes, items=doc.items;
@@ -637,3 +653,4 @@ function makeEditor(node, doc, focus){
     if(doc.view && mode==='pages'){ const v=viewWorld(); const vis=pagesSorted().some(p=>!(p.x>v[2]||p.y>v[3]||p.x+p.w<v[0]||p.y+p.h<v[1])); if(!vis){ const ps=pagesSorted(); let best=ps[0]; const cy=(v[1]+v[3])/2; for(const p of ps) if(Math.abs(p.y+p.h/2-cy)<Math.abs(best.y+best.h/2-cy)) best=p; goPage(best); } }
     invalidate(); if(mode==='pages' && pagesSorted().length>1) pageChip.style.display='block'; } };
 }
+
