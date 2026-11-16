@@ -166,7 +166,7 @@ export function makeEditor(node, doc, focus){
   async function close(){
     if(closed) return; closed=true; finishText();
     await save(); if(node.thumbStale || !node.thumb) await makeThumb().catch(e=>console.warn(e));
-    window.removeEventListener('resize',sizeAll); window.removeEventListener('keydown',onKey);
+    window.removeEventListener('resize',sizeAll); window.removeEventListener('keydown',onKey); window.removeEventListener('keyup',onKeyUp); document.removeEventListener('visibilitychange',onHide); window.removeEventListener('pagehide',onHide);
     root.remove(); NB.editor=null; render();
   }
 
@@ -641,14 +641,17 @@ export function makeEditor(node, doc, focus){
     else if(k==='escape'){ setSel(null); closePop(); }
     else if(k===' ') spaceDown=e.type==='keydown';
   }
-  window.addEventListener('keydown',onKey); window.addEventListener('keyup',e=>{ if(e.key===' ') spaceDown=false; });
+  const onKeyUp=e=>{ if(e.key===' ') spaceDown=false; };
+  /* l'appli passe en arrière-plan : on enregistre tout de suite, sans attendre le délai */
+  const onHide=()=>{ if(document.hidden!==false) save(); };
+  window.addEventListener('keydown',onKey); window.addEventListener('keyup',onKeyUp);
 
   setTool('pen'); updateCounts();
   function perf(){ const t0=performance.now(); renderCache(); const t1=performance.now(); for(let i=0;i<30;i++){ view.tx+=3; compose(); } const t2=performance.now();
     const long=[]; for(let i=0;i<600;i++) long.push(100+i, 200+Math.sin(i/9)*40, 0.5); cur={tool:'pen',pen:'fountain',size:2.4,color:'#123',pts:long}; const t3=performance.now(); for(let i=0;i<20;i++) drawLive(); const t4=performance.now(); cur=null; clearInk();
     return {renderCache:+(t1-t0).toFixed(1), composeFrame:+((t2-t1)/30).toFixed(2), live600pts:+((t4-t3)/20).toFixed(2)}; }
   return { root, close, perf, flush:()=>save(), debug:()=>({strokes,items,view,cv,hist:hist.length}), start:()=>{
-    window.addEventListener('resize',sizeAll); sizeAll();
+    window.addEventListener('resize',sizeAll); sizeAll(); document.addEventListener('visibilitychange',onHide); window.addEventListener('pagehide',onHide);
     if(focus){ view.s=Math.max(1,view.s); view.tx=W*0.3-focus.x*view.s; view.ty=H/2-focus.y*view.s; }
     else if(!doc.view){ if(mode==='pages'){ const pg=pagesSorted()[0]; if(pg){ goPage(pg); } } else { const b=unionBox(strokes,items); if(b){ view.s=Math.min(1.1,(W-60)/Math.max(400,b.w)); view.tx=30-b.x*view.s; view.ty=30-b.y*view.s; } } }
     if(doc.view && mode==='pages'){ const v=viewWorld(); const vis=pagesSorted().some(p=>!(p.x>v[2]||p.y>v[3]||p.x+p.w<v[0]||p.y+p.h<v[1])); if(!vis){ const ps=pagesSorted(); let best=ps[0]; const cy=(v[1]+v[3])/2; for(const p of ps) if(Math.abs(p.y+p.h/2-cy)<Math.abs(best.y+best.h/2-cy)) best=p; goPage(best); } }
