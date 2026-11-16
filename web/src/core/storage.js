@@ -4,6 +4,7 @@ import { clone } from './helpers.js';
 import { S, topicsOf } from './state.js';
 import { dbName, openDb, tx } from './db.js';
 import { deleteProblem, loadCarnet, migrateFromLocalStorage, openCarnet, putProblem, putSettings, readLegacy, writeCarnet } from './carnet.js';
+import { cleanupGenerations, maybeAutoBackup, restoredNotice } from './backup.js';
 import { nbInit } from '../notes/store.js';
 import { go, refresh, render, toast } from '../ui/chrome.js';
 
@@ -22,10 +23,14 @@ export async function init(){
   render();
   document.getElementById('gear').addEventListener('click',()=>go('settings'));
   initAI();
-  nbInit().then(()=>refresh());
+  const notesReady=nbInit().then(()=>refresh());
   // Demande au système de ne jamais purger le stockage de l'appli (sans effet si déjà accordé).
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
+  restoredNotice();
   await startLocal();
+  cleanupGenerations();
+  // sauvegarde automatique : une fois tout chargé, sans gêner le démarrage
+  notesReady.then(()=>setTimeout(maybeAutoBackup, 5000));
 }
 
 export async function startLocal(){

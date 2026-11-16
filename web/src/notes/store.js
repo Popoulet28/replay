@@ -1,4 +1,5 @@
 import { today, uid } from '../core/helpers.js';
+import { dbName, openDb } from '../core/db.js';
 import { S } from '../core/state.js';
 
 /* =====================================================================
@@ -7,7 +8,7 @@ import { S } from '../core/state.js';
 export const NB = { db:null, nodes:new Map(), ready:false, loading:null, urls:new Map(), editor:null, clip:null };
 export function nbOpen(){
   if(NB.db) return Promise.resolve(NB.db);
-  return new Promise((res,rej)=>{ const r=indexedDB.open('replay-notes',1);
+  return new Promise((res,rej)=>{ const r=indexedDB.open(dbName('replay-notes'),1);
     r.onupgradeneeded=()=>{ const d=r.result; d.createObjectStore('nodes',{keyPath:'id'}); d.createObjectStore('docs'); d.createObjectStore('blobs'); };
     r.onsuccess=()=>{ NB.db=r.result; res(NB.db); }; r.onerror=()=>rej(r.error); });
 }
@@ -17,6 +18,8 @@ export function nbTx(store, mode, fn){
     if(rq) rq.onsuccess=()=>{ out=rq.result; };
     tx.oncomplete=()=>res(out); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error); }));
 }
+/* Ouvre la base des notes d'une autre génération (restauration d'une sauvegarde). */
+export function nbOpenGen(gen){ return openDb(dbName('replay-notes',gen),1,d=>{ d.createObjectStore('nodes',{keyPath:'id'}); d.createObjectStore('docs'); d.createObjectStore('blobs'); }); }
 export const nbGet=(s,k)=>nbTx(s,'readonly',st=>st.get(k));
 export const nbPut=(s,v,k)=>nbTx(s,'readwrite',st=>k===undefined?st.put(v):st.put(v,k));
 export const nbDel=(s,k)=>nbTx(s,'readwrite',st=>st.delete(k));

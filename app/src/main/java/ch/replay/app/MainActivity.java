@@ -2,10 +2,13 @@ package ch.replay.app;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
@@ -173,20 +176,67 @@ public class MainActivity extends Activity {
     public class Bridge {
         @JavascriptInterface
         public synchronized boolean beginFile(String name, String mime) {
+            return begin(null, name, mime);
+        }
+
+        /** Same as beginFile, inside Downloads/<folder> (used for automatic backups). */
+        @JavascriptInterface
+        public synchronized boolean beginFileIn(String folder, String name, String mime) {
+            return begin(folder, name, mime);
+        }
+
+        private boolean begin(String folder, String name, String mime) {
             try {
-                if (pendingOut != null) { try { pendingOut.close(); } catch (Exception ignored) { } pendingOut = null; }
+                discardPending();
                 ContentValues cv = new ContentValues();
                 cv.put(MediaStore.Downloads.DISPLAY_NAME, name);
                 cv.put(MediaStore.Downloads.MIME_TYPE, mime);
                 cv.put(MediaStore.Downloads.IS_PENDING, 1);
+                if (folder != null && !folder.isEmpty()) {
+                    cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + folder);
+                }
                 pendingUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
                 if (pendingUri == null) return false;
                 pendingOut = getContentResolver().openOutputStream(pendingUri);
-                return pendingOut != null;
+                if (pendingOut == null) { discardPending(); return false; }
+                return true;
             } catch (Exception e) {
-                pendingOut = null;
+                discardPending();
                 return false;
             }
+        }
+
+        /** Closes and deletes a file that was begun but not finished, so no truncated file is left behind. */
+        private void discardPending() {
+            if (pendingOut != null) { try { pendingOut.close(); } catch (Exception ignored) { } pendingOut = null; }
+            if (pendingUri != null) { try { getContentResolver().delete(pendingUri, null, null); } catch (Exception ignored) { } pendingUri = null; }
+        }
+
+        @JavascriptInterface
+        public synchronized void abortFile() {
+            discardPending();
+        }
+
+        /** Keeps the newest files named prefix* in Downloads/<folder> and deletes the older ones. Returns how many were deleted. */
+        @JavascriptInterface
+        public synchronized int pruneFiles(String folder, String prefix, int keep) {
+            int removed = 0;
+            try {
+                String[] proj = { MediaStore.Downloads._ID };
+                String sel = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND " + MediaStore.Downloads.DISPLAY_NAME + " LIKE ?";
+                String[] args = { Environment.DIRECTORY_DOWNLOADS + "/" + folder + "%", prefix + "%" };
+                try (Cursor c = getContentResolver().query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj, sel, args,
+                        MediaStore.Downloads.DATE_ADDED + " DESC, " + MediaStore.Downloads._ID + " DESC")) {
+                    if (c == null) return 0;
+                    int n = 0;
+                    while (c.moveToNext()) {
+                        if (n++ < keep) continue;
+                        Uri u = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, c.getLong(0));
+                        removed += getContentResolver().delete(u, null, null);
+                    }
+                }
+            } catch (Exception ignored) { }
+            return removed;
         }
 
         @JavascriptInterface
@@ -209,8 +259,10 @@ public class MainActivity extends Activity {
                 ContentValues cv = new ContentValues();
                 cv.put(MediaStore.Downloads.IS_PENDING, 0);
                 getContentResolver().update(pendingUri, cv, null, null);
+                pendingUri = null;
                 return true;
             } catch (Exception e) {
+                discardPending();
                 return false;
             }
         }

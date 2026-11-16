@@ -1,16 +1,11 @@
-import { importBackup } from '../core/backup.js';
-import { DEFAULT_SETTINGS, fixCourse } from '../core/data.js';
 import { clone, el, parseYmd, today, uid } from '../core/helpers.js';
-import { S, topicsOf } from '../core/state.js';
-import { imgBlob } from '../core/images.js';
-import { IMG_URLS, idbPut, persistAll } from '../core/storage.js';
-import { BMP } from './bitmaps.js';
+import { hasNativeFiles, saveBlob } from '../core/save-file.js';
 import { normalizeDoc } from './editor.js';
 import { unionBox } from './objects.js';
 import { loadScriptLib, progressBox } from './pdf.js';
 import { renderRegion } from './scene.js';
-import { NB, docBlobKeys, nbAll, nbClear, nbCreate, nbGet, nbInit, nbKeys, nbPut, nbSaveNode, putBlob } from './store.js';
-import { modal, render, toast } from '../ui/chrome.js';
+import { docBlobKeys, nbCreate, nbGet, nbPut, nbSaveNode, putBlob } from './store.js';
+import { modal, toast } from '../ui/chrome.js';
 
 /* =====================================================================
    Cours v2 — fichiers, export, sauvegarde (partie 3)
@@ -28,14 +23,9 @@ export const safeName=n=>String(n||'note').replace(/[\\/:*?"<>|]+/g,'-').slice(0
 export function dateName(){ return 'Cours du '+parseYmd(today()).toLocaleDateString('fr-CH',{day:'numeric',month:'long'}); }
 export const COVERS=['#1d2fa0','#d3302f','#1d8a4e','#7a3fc4','#e07020','#0e8a9c','#16182a','#c98a00'];
 export async function saveBinary(name, mime, bytes){
-  if(window.AndroidBridge && AndroidBridge.beginFile){
-    if(!AndroidBridge.beginFile(name, mime)){ toast('Enregistrement impossible.','err'); return false; }
-    const CH=3*65536;
-    for(let i=0;i<bytes.length;i+=CH){ const part=bytes.subarray(i,i+CH); let s=''; for(let j=0;j<part.length;j+=8190) s+=String.fromCharCode.apply(null, part.subarray(j,j+8190));
-      if(!AndroidBridge.appendBase64(btoa(s))){ toast('Enregistrement interrompu.','err'); return false; } }
-    const ok=AndroidBridge.endFile(); toast(ok?'Enregistré dans Téléchargements : '+name:'Enregistrement impossible.', ok?'':'err'); return ok;
-  }
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([bytes],{type:mime})); a.download=name; document.body.append(a); a.click(); a.remove(); return true;
+  const ok=await saveBlob(name, mime, new Blob([bytes],{type:mime}));
+  if(hasNativeFiles()) toast(ok?'Enregistré dans Téléchargements : '+name:'Enregistrement impossible.', ok?'':'err');
+  return ok;
 }
 export async function exportNotePdf(node){
   const pb=progressBox('Préparation du PDF…');
@@ -64,42 +54,3 @@ export async function duplicateNote(n){
   if(n.thumb){ const b=await nbGet('blobs',n.thumb); if(b){ copy.thumb=await putBlob(b,'th:'); await nbSaveNode(copy); } }
   return copy;
 }
-/* sauvegarde complète (.zip) : carnet Replay + cours */
-export async function exportBackupFull(){
-  const pb=progressBox('Préparation de la sauvegarde…');
-  try{
-    const JSZip=await loadScriptLib('lib/jszip.min.js','JSZip'); const z=new JSZip();
-    z.file('replay.json', JSON.stringify({app:'replay', v:3, at:new Date().toISOString(), settings:S.settings, problems:Object.fromEntries(S.problems)}));
-    for(const p of S.problems.values()) for(const k of ['problemImg','solutionImg','noteImg']){ const r=p[k]; if(r&&r.startsWith('idb:')){ const ib=await imgBlob(r); if(ib) z.file('images/'+encodeURIComponent(r), ib); } }
-    await nbInit(); const nodes=await nbAll('nodes'); const docs={};
-    for(const n of nodes) if(n.type==='note'){ const d=await nbGet('docs',n.id); if(d) docs[n.id]=d; }
-    z.file('notes.json', JSON.stringify({nodes, docs}));
-    const keys=await nbKeys('blobs'); let i=0;
-    for(const k of keys){ const b=await nbGet('blobs',k); if(b) z.file('blobs/'+encodeURIComponent(k), b); i++; if(i%5===0) pb.set('Fichiers : '+i+' / '+keys.length, i/keys.length*0.6); }
-    const bytes=await z.generateAsync({type:'uint8array', compression:'STORE'}, m=>pb.set('Assemblage…',0.6+m.percent/250));
-    pb.close(); await saveBinary('replay-sauvegarde-'+today()+'.zip','application/zip',bytes);
-  }catch(e){ pb.close(); console.warn(e); toast('La sauvegarde a échoué.','err'); }
-}
-export async function importBackupAny(file){
-  if(/\.json$/i.test(file.name)) return importBackup(file);
-  const pb=progressBox('Restauration…');
-  try{
-    const JSZip=await loadScriptLib('lib/jszip.min.js','JSZip'); const z=await JSZip.loadAsync(file);
-    const mf=z.file('replay.json'); if(!mf) throw new Error('bad');
-    const o=JSON.parse(await mf.async('string')); if(o.app!=='replay') throw new Error('bad');
-    const files=Object.values(z.files).filter(f=>!f.dir); let i=0;
-    for(const f of files) if(f.name.startsWith('images/')){ const k=decodeURIComponent(f.name.slice(7)); const b=new Blob([await f.async('uint8array')],{type:'image/jpeg'}); await idbPut(k,b); IMG_URLS.set(k,URL.createObjectURL(b)); }
-    S.settings=Object.assign(clone(DEFAULT_SETTINGS), o.settings||{});
-    S.problems=new Map(Object.entries(o.problems||{}).map(([k,v])=>{ v.course=fixCourse(v.course); v.topics=topicsOf(v); return [k,v]; }));
-    await persistAll({from:'import'});
-    const nf=z.file('notes.json');
-    if(nf){ const nj=JSON.parse(await nf.async('string'));
-      await nbClear('nodes'); await nbClear('docs'); await nbClear('blobs'); NB.nodes.clear(); NB.urls.clear(); BMP.map.clear(); BMP.px=0;
-      for(const n of nj.nodes||[]){ await nbPut('nodes',n); NB.nodes.set(n.id,n); }
-      for(const [id,d] of Object.entries(nj.docs||{})) await nbPut('docs',d,id);
-      for(const f of files) if(f.name.startsWith('blobs/')){ const k=decodeURIComponent(f.name.slice(6)); await nbPut('blobs', new Blob([await f.async('uint8array')],{type:k.startsWith('pdf:')?'application/pdf':'image/jpeg'}), k); i++; if(i%5===0) pb.set('Fichiers : '+i, Math.min(1,i/files.length)); }
-    }
-    pb.close(); render(); toast('Sauvegarde restaurée');
-  }catch(e){ pb.close(); console.warn(e); toast('Ce fichier n’est pas une sauvegarde Replay valide.','err'); }
-}
-

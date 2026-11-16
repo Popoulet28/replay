@@ -647,7 +647,7 @@ export function makeEditor(node, doc, focus){
   function perf(){ const t0=performance.now(); renderCache(); const t1=performance.now(); for(let i=0;i<30;i++){ view.tx+=3; compose(); } const t2=performance.now();
     const long=[]; for(let i=0;i<600;i++) long.push(100+i, 200+Math.sin(i/9)*40, 0.5); cur={tool:'pen',pen:'fountain',size:2.4,color:'#123',pts:long}; const t3=performance.now(); for(let i=0;i<20;i++) drawLive(); const t4=performance.now(); cur=null; clearInk();
     return {renderCache:+(t1-t0).toFixed(1), composeFrame:+((t2-t1)/30).toFixed(2), live600pts:+((t4-t3)/20).toFixed(2)}; }
-  return { root, close, perf, debug:()=>({strokes,items,view,cv,hist:hist.length}), start:()=>{
+  return { root, close, perf, flush:()=>save(), debug:()=>({strokes,items,view,cv,hist:hist.length}), start:()=>{
     window.addEventListener('resize',sizeAll); sizeAll();
     if(focus){ view.s=Math.max(1,view.s); view.tx=W*0.3-focus.x*view.s; view.ty=H/2-focus.y*view.s; }
     else if(!doc.view){ if(mode==='pages'){ const pg=pagesSorted()[0]; if(pg){ goPage(pg); } } else { const b=unionBox(strokes,items); if(b){ view.s=Math.min(1.1,(W-60)/Math.max(400,b.w)); view.tx=30-b.x*view.s; view.ty=30-b.y*view.s; } } }
