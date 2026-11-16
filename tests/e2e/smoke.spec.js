@@ -51,6 +51,21 @@ test('ajouter un problème, le retrouver après rechargement, le réviser', asyn
   expect(errors).toEqual([]);
 });
 
+test('les formules et les polices s’affichent sans réseau', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('/index.html');
+  await page.locator('#nav button', { hasText: 'Ajouter' }).click();
+  await page.locator('textarea').first().fill('Montrer que $T^2 = \\frac{4\\pi^2}{GM} a^3$ pour une orbite.');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await page.locator('#nav button', { hasText: 'Carnet' }).click();
+  await page.locator('.item').first().click();
+  await expect(page.locator('.modal .katex')).toHaveCount(1);
+  await expect(page.locator('.modal .katex .mfrac')).toHaveCount(1);
+  const fonts = await page.evaluate(async () => { await document.fonts.ready; return [document.fonts.check('16px "Bricolage Grotesque"'), document.fonts.check('16px Kalam'), document.fonts.check('16px KaTeX_Main')]; });
+  expect(fonts).toEqual([true, true, true]);
+  expect(errors).toEqual([]);
+});
+
 test('créer une note, y écrire un trait, la retrouver', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto('/index.html');

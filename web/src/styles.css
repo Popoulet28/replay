@@ -1,3 +1,6 @@
+@import "./fonts.css";
+@import "katex/dist/katex.min.css";
+
 :root{
   --paper:#f7f8f3; --sheet:#ffffff; --sheet2:#f3f4ee;
   --grid-minor:rgba(226,122,62,.10); --grid-major:rgba(226,122,62,.22);
