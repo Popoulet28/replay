@@ -8,3 +8,5 @@ node_modules/
 app/src/main/assets/www/
 test-results/
 playwright-report/
+revise/launcher/obj/
+revise/*.exe
