@@ -1,6 +1,7 @@
 import { el } from '../core/helpers.js';
 import { S } from '../core/state.js';
-import { copyText, fmtVU, parseNum } from './uncertainty.js';
+import { fmtVU, parseNum } from './numfmt.js';
+import { copyText } from './uncertainty.js';
 
 /* ---- 5b. Linear fit ---- */
 export function niceTicks(lo,hi,n){ if(lo===hi){ lo-=1; hi+=1; } const span=hi-lo; const step0=span/n; const mag=Math.pow(10,Math.floor(Math.log10(step0))); const step=[1,2,5,10].map(m=>m*mag).find(s=>s>=step0); const t=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9*span; v+=step) t.push(+v.toPrecision(12)); return {ticks:t, step}; }

@@ -1,20 +1,10 @@
 import { el } from '../core/helpers.js';
 import { S } from '../core/state.js';
 import { evalNum, idsIn, parseExpr } from './expr.js';
+import { fmtVU, parseNum } from './numfmt.js';
 import { toast } from '../ui/chrome.js';
 
 /* ---- rounding with uncertainty ---- */
-export function fmtVU(v,u){
-  if(!isFinite(v)) return {txt:String(v),tex:String(v)};
-  let k=0; const av=Math.abs(v)||Math.abs(u)||1;
-  if(av>=1e4||av<1e-3) k=Math.floor(Math.log10(av));
-  const sv=v/Math.pow(10,k), su=u/Math.pow(10,k);
-  if(!(su>0)){ const t=sv.toPrecision(4); return {txt:t+(k?' × 10^'+k:''), tex:t+(k?' \\times 10^{'+k+'}':''), dec:null}; }
-  const e=Math.floor(Math.log10(su)); const dec=Math.max(0,1-e);
-  const vs=sv.toFixed(dec), us=su.toFixed(dec);
-  return {txt:'('+vs+' ± '+us+')'+(k?' × 10^'+k:''), tex:'('+vs+' \\pm '+us+')'+(k?' \\times 10^{'+k+'}':''), v:vs, u:us};
-}
-export const parseNum = s => { const t=String(s).trim().replace(',','.'); return t===''?NaN:Number(t); };
 export async function copyText(t, okMsg){ try{ await navigator.clipboard.writeText(t); toast(okMsg||'Copié'); }catch(e){ toast('Copie impossible ici.','err'); } }
 
 /* ---- 5a. Uncertainty propagation ---- */

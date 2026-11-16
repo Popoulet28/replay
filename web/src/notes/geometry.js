@@ -1,5 +1,5 @@
 import { uid } from '../core/helpers.js';
-import { PENS } from './prefs.js';
+import { PENS } from './pens.js';
 
 /* ---------------- géométrie de l'encre ---------------- */
 export const OUTLINE=new WeakMap();
