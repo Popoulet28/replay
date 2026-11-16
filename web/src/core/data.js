@@ -18,5 +18,4 @@ export const REASONS = [
 ];
 export const REASON_LABEL = Object.fromEntries(REASONS.map(r=>[r.id,r.label]));
 export const DEFAULT_SETTINGS = { dailyLimit:1, examLimit:3, boostDays:7, reviewMode:'quick', penOnly:true, customTopics:{}, extraCourses:[], exams:[] };
-export const LS_KEY = 'replay-notebook-v1';
 

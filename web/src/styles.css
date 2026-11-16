@@ -383,3 +383,7 @@ input.tick:checked::after{content:"✓";font-family:Kalam,cursive;font-weight:70
 .editor.full .ed-top,.editor.full .ed-sub{display:none}
 .editor.full .full-bar{display:flex}
 @media (max-width:820px){ .ed-top{flex-wrap:wrap} .ed-top .tools{order:5;width:100%;justify-content:space-between;overflow-x:auto} .ed-title{max-width:46vw} .ed-hint{display:none} }
+
+/* bandeau d'alerte (stockage, migration) */
+.card.notice{border-left:5px solid var(--blue)}
+.card.notice.err{border-left-color:var(--red)}

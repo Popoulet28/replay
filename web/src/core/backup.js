@@ -1,8 +1,8 @@
 import { DEFAULT_SETTINGS, fixCourse } from './data.js';
 import { clone, el, today } from './helpers.js';
-import { blobToDataURL } from './images.js';
+import { blobToDataURL, imgBlob } from './images.js';
 import { S, topicsOf } from './state.js';
-import { IMG_URLS, idbPut, persistLocal } from './storage.js';
+import { IMG_URLS, idbPut, persistAll } from './storage.js';
 import { exportBackupFull, importBackupAny } from '../notes/files.js';
 import { NB, nbIsRoot } from '../notes/store.js';
 import { confirmBox, go, refresh, render, toast } from '../ui/chrome.js';
@@ -23,7 +23,7 @@ export async function exportBackup(){
   try{
     const imgs={};
     for(const p of S.problems.values()) for(const k of ['problemImg','solutionImg','noteImg']){
-      const r=p[k]; if(r && r.startsWith('idb:') && IMG_URLS.has(r)){ const b=await (await fetch(IMG_URLS.get(r))).blob(); imgs[r]=await blobToDataURL(b); } }
+      const r=p[k]; if(r && r.startsWith('idb:')){ const b=await imgBlob(r); if(b) imgs[r]=await blobToDataURL(b); } }
     const data=JSON.stringify({app:'replay',v:1,at:new Date().toISOString(),settings:S.settings,problems:Object.fromEntries(S.problems),images:imgs});
     const name='replay-sauvegarde-'+today()+'.json';
     if(window.AndroidBridge && AndroidBridge.saveFile){ const ok=AndroidBridge.saveFile(name,data); toast(ok?'Sauvegarde enregistrée dans Téléchargements':'La sauvegarde a échoué.', ok?'':'err'); }
@@ -36,7 +36,7 @@ export async function importBackup(file){
   for(const [k,d] of Object.entries(o.images||{})){ const b=await (await fetch(d)).blob(); await idbPut(k,b); IMG_URLS.set(k,URL.createObjectURL(b)); }
   S.settings=Object.assign(clone(DEFAULT_SETTINGS), o.settings||{});
   S.problems=new Map(Object.entries(o.problems||{}).map(([k,v])=>{ v.course=fixCourse(v.course); v.topics=topicsOf(v); return [k,v]; }));
-  persistLocal(); render(); toast('Sauvegarde restaurée');
+  await persistAll({from:'import'}); render(); toast('Sauvegarde restaurée');
 }
 window.__back=function(){
   if(NB.editor){ NB.editor.close(); return true; }

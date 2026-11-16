@@ -22,7 +22,7 @@ export function renderStatus(){
   const st=document.getElementById('status');
   if (!S.loaded){ st.textContent='Ouverture du carnet…'; return; }
   const n=activeProblems().length;
-  const where = S.mode==='cloud' ? (S.stale?'Enregistré sur ton compte · peut-être pas à jour':'Enregistré sur ton compte') : S.mode==='local' ? 'Enregistré sur cet appareil uniquement' : 'Pas d’enregistrement — stockage bloqué';
+  const where = S.mode==='local' ? 'Enregistré sur cet appareil uniquement' : 'Pas d’enregistrement — stockage bloqué';
   st.replaceChildren(el('b',{text:n+' problème'+(n===1?'':'s')}), el('span',{class:'where',text:where}));
 }
 export function render(){
@@ -30,6 +30,7 @@ export function render(){
   const v=document.getElementById('view'); v.replaceChildren();
   if (!S.loaded){ v.append(el('div',{class:'card empty'}, el('div',{class:'muted',text:'Ouverture du carnet…'}))); return; }
   const fn = {today:viewToday, add:viewAdd, review:viewReview, library:viewLibrary, stats:viewProfile, exams:viewAgenda, tools:viewTools, cours:viewCours, settings:viewSettings}[S.view] || viewToday;
+  if (S.notice) v.append(el('div',{class:'card notice'+(S.notice.kind==='err'?' err':''),role:'alert'}, el('b',{text:S.notice.kind==='err'?'Attention':'Information'}), el('p',{text:S.notice.text,style:{margin:'6px 0 0'}})));
   v.append(fn());
   setTimeout(checkProgress, 400);
 }

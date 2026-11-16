@@ -2,7 +2,8 @@ import { importBackup } from '../core/backup.js';
 import { DEFAULT_SETTINGS, fixCourse } from '../core/data.js';
 import { clone, el, parseYmd, today, uid } from '../core/helpers.js';
 import { S, topicsOf } from '../core/state.js';
-import { IMG_URLS, idbPut, persistLocal } from '../core/storage.js';
+import { imgBlob } from '../core/images.js';
+import { IMG_URLS, idbPut, persistAll } from '../core/storage.js';
 import { BMP } from './bitmaps.js';
 import { normalizeDoc } from './editor.js';
 import { unionBox } from './objects.js';
@@ -69,7 +70,7 @@ export async function exportBackupFull(){
   try{
     const JSZip=await loadScriptLib('lib/jszip.min.js','JSZip'); const z=new JSZip();
     z.file('replay.json', JSON.stringify({app:'replay', v:3, at:new Date().toISOString(), settings:S.settings, problems:Object.fromEntries(S.problems)}));
-    for(const p of S.problems.values()) for(const k of ['problemImg','solutionImg','noteImg']){ const r=p[k]; if(r&&r.startsWith('idb:')&&IMG_URLS.has(r)) z.file('images/'+encodeURIComponent(r), await (await fetch(IMG_URLS.get(r))).blob()); }
+    for(const p of S.problems.values()) for(const k of ['problemImg','solutionImg','noteImg']){ const r=p[k]; if(r&&r.startsWith('idb:')){ const ib=await imgBlob(r); if(ib) z.file('images/'+encodeURIComponent(r), ib); } }
     await nbInit(); const nodes=await nbAll('nodes'); const docs={};
     for(const n of nodes) if(n.type==='note'){ const d=await nbGet('docs',n.id); if(d) docs[n.id]=d; }
     z.file('notes.json', JSON.stringify({nodes, docs}));
@@ -90,7 +91,7 @@ export async function importBackupAny(file){
     for(const f of files) if(f.name.startsWith('images/')){ const k=decodeURIComponent(f.name.slice(7)); const b=new Blob([await f.async('uint8array')],{type:'image/jpeg'}); await idbPut(k,b); IMG_URLS.set(k,URL.createObjectURL(b)); }
     S.settings=Object.assign(clone(DEFAULT_SETTINGS), o.settings||{});
     S.problems=new Map(Object.entries(o.problems||{}).map(([k,v])=>{ v.course=fixCourse(v.course); v.topics=topicsOf(v); return [k,v]; }));
-    persistLocal();
+    await persistAll({from:'import'});
     const nf=z.file('notes.json');
     if(nf){ const nj=JSON.parse(await nf.async('string'));
       await nbClear('nodes'); await nbClear('docs'); await nbClear('blobs'); NB.nodes.clear(); NB.urls.clear(); BMP.map.clear(); BMP.px=0;

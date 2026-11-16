@@ -38,7 +38,7 @@ export function viewSettings(){
   cardT.append(el('div',{class:'row',style:{marginTop:'10px'}}, el('div',{style:{flex:1}},newCourse), el('button',{class:'btn',text:'Ajouter le cours',onclick:()=>{ const v=newCourse.value.trim(); if(!v||courses().includes(v)) return; st.extraCourses=(st.extraCourses||[]).concat([v]); saveSettings(); render(); }})));
   root.append(cardT);
   root.append(el('div',{class:'card'}, el('h3',{text:'Tes données'}),
-    el('p',{class:'small',text: S.mode==='cloud' ? 'Tes problèmes et photos sont enregistrés en privé sur ton compte Claude : les mêmes sur ta tablette et ton ordinateur. Toi seul peux les voir.' : S.mode==='local' ? 'Tes problèmes et photos sont enregistrés sur ta tablette. Fais une sauvegarde de temps en temps : si tu désinstalles l’app, tout est effacé.' : 'Le stockage est bloqué ici : rien ne sera gardé après fermeture de la page.'}),
+    el('p',{class:'small',text: S.mode==='local' ? 'Tes problèmes et photos sont enregistrés sur ta tablette. Fais une sauvegarde de temps en temps : si tu désinstalles l’app, tout est effacé.' : 'Le stockage est bloqué ici : rien ne sera gardé après fermeture de la page.'}),
     backupControls()));
   return root;
 }

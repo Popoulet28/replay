@@ -1,6 +1,6 @@
 import { REASONS, REASON_LABEL } from '../core/data.js';
 import { addDays, clone, el, fmtDate, fmtDue, today } from '../core/helpers.js';
-import { imgSrc } from '../core/images.js';
+import { imgEl, imgSrc } from '../core/images.js';
 import { S, allProblems, courseTag, courses, shortCourse, topicsFor, topicsOf } from '../core/state.js';
 import { removeProblem, saveProblem } from '../core/storage.js';
 import { confirmBox, modal, render, toast, viewImage } from '../ui/chrome.js';
@@ -20,7 +20,7 @@ export function viewLibrary(){
   if (!list.length){ root.append(el('div',{class:'card empty muted',text: f==='archived'?'Les problèmes marqués comme maîtrisés apparaissent ici.':'Pas encore de problème ici.'})); return root; }
   const box=el('div',{class:'list'});
   for (const p of list){
-    const th = p.problemImg ? el('img',{class:'thumb',src:imgSrc(p.problemImg),alt:'',loading:'lazy'}) : el('div',{class:'thumb txt',text:(p.problemText||'').slice(0,40)});
+    const th = p.problemImg ? imgEl({class:'thumb',ref:p.problemImg,alt:'',loading:'lazy'}) : el('div',{class:'thumb txt',text:(p.problemText||'').slice(0,40)});
     box.append(el('div',{class:'item',onclick:()=>openDetail(p.id)}, th,
       el('div',{style:{flex:1,minWidth:0}},
         el('div',{style:{fontWeight:600},text:(topicsOf(p).join(', ')||'Sans thème')+(p.source?' · '+p.source:'')}),
@@ -39,7 +39,7 @@ export function openDetail(id){
   const box=el('div',{},
     el('div',{class:'row'}, el('h2',{text:topicsOf(p).join(', ')||'Problème',style:{marginBottom:0}}), el('span',{class:'spacer'}), el('button',{class:'btn small ghost',text:'Fermer',onclick:()=>close()})),
     el('div',{class:'muted small',style:{margin:'4px 0 12px'},text:p.course+(p.source?' · '+p.source:'')+' · ajouté le '+fmtDate(p.created)+' · prochain : '+(p.archived?'—':fmtDue(p.srs.due))}),
-    p.problemImg? el('img',{class:'problem-img',src:imgSrc(p.problemImg),onclick:()=>viewImage(imgSrc(p.problemImg))}):null,
+    p.problemImg? imgEl({class:'problem-img',ref:p.problemImg,onclick:()=>viewImage(imgSrc(p.problemImg))}):null,
     p.problemText? mathText(p.problemText):null,
     el('label',{class:'f',text:'Thèmes'}), tChips.el,
     el('label',{class:'f',text:'Pourquoi tu l’as raté'}), rc.el,

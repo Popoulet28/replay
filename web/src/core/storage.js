@@ -1,101 +1,82 @@
 import { initAI } from '../ai/claude.js';
-import { DEFAULT_SETTINGS, LS_KEY, fixCourse } from './data.js';
-import { clone, sleep } from './helpers.js';
+import { DEFAULT_SETTINGS, fixCourse } from './data.js';
+import { clone } from './helpers.js';
 import { S, topicsOf } from './state.js';
+import { dbName, openDb, tx } from './db.js';
+import { deleteProblem, loadCarnet, migrateFromLocalStorage, openCarnet, putProblem, putSettings, readLegacy, writeCarnet } from './carnet.js';
 import { nbInit } from '../notes/store.js';
 import { go, refresh, render, toast } from '../ui/chrome.js';
 
 /* ---------- storage ---------- */
+let CARNET = null; // base IndexedDB du carnet (null en mode « mémoire »)
+export const carnetDb = () => CARNET;
+
+export function normalizeProblem(v){ v.course=fixCourse(v.course); v.topics=topicsOf(v); return v; }
+export function applyCarnet(data){
+  S.settings = Object.assign(clone(DEFAULT_SETTINGS), data.settings||{});
+  (S.settings.exams||[]).forEach(e=>{ e.course=fixCourse(e.course); });
+  S.problems = new Map((data.problems||[]).map(p=>[p.id, normalizeProblem(p)]));
+}
+
 export async function init(){
   render();
   document.getElementById('gear').addEventListener('click',()=>go('settings'));
   initAI();
   nbInit().then(()=>refresh());
-  const api = (window.claude && typeof window.claude.use==='function') ? window.claude : null;
-  if (api){
-    try{
-      const [db,user,assets] = await Promise.all([
-        api.use('db'), api.use('user'), api.use('assets').catch(()=>null)
-      ]);
-      const id = user ? await user.id() : null;
-      if (db && id){ startCloud(db, id, assets); return; }
-    }catch(e){ console.warn('capabilities', e); }
-  }
-  startLocal();
+  // Demande au système de ne jamais purger le stockage de l'appli (sans effet si déjà accordé).
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
+  await startLocal();
 }
-export function startCloud(db, id, assets){
-  S.mode='cloud'; S.db=db; S.uid=id; S.assets=assets;
-  S.settingsRef = db.doc('data/users/'+id+'/settings');
-  S.col = S.settingsRef.collection('problems');
-  let hadS=false, hadP=false, okS=false, okP=false;
-  const timer = setTimeout(()=>{ if(!(okS&&okP)){ S.stale=true; S.loaded=true; refresh(); } }, 10000);
-  const after = ()=>{
-    if (hadS && hadP) S.loaded = true;
-    if (okS && okP){ clearTimeout(timer); S.stale=false; }
-    refresh();
-  };
-  S.settingsRef.onSnapshot(snap=>{
-    if (snap.exists){ S.settings = Object.assign(clone(DEFAULT_SETTINGS), clone(snap.data())); (S.settings.exams||[]).forEach(e=>e.course=fixCourse(e.course)); }
-    hadS = true; if(!snap.metadata.fromCache) okS = true; after();
-  }, err=>{ console.warn(err); hadS=okS=true; after(); });
-  S.col.onSnapshot(snap=>{
-    const m = new Map();
-    snap.docs.forEach(d=>{ if(d.exists) { const o=Object.assign(clone(d.data()), {id:d.id}); o.course=fixCourse(o.course); o.topics=topicsOf(o); m.set(d.id,o); } });
-    S.problems = m; hadP = true; if(!snap.metadata.fromCache) okP = true; after();
-  }, err=>{ console.warn(err); hadP=okP=true; toast('Impossible de charger tes problèmes ('+(err&&err.code||'error')+').','err'); after(); });
-}
-export const IMG_URLS=new Map();
-export function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open('replay-images',1); r.onupgradeneeded=()=>r.result.createObjectStore('img'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-export async function idbPut(key,blob){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction('img','readwrite'); tx.objectStore('img').put(blob,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
-export async function idbDel(key){ const db=await idbOpen(); return new Promise(res=>{ const tx=db.transaction('img','readwrite'); tx.objectStore('img').delete(key); tx.oncomplete=()=>res(); tx.onerror=()=>res(); }); }
-export async function idbAll(){ const db=await idbOpen(); return new Promise((res,rej)=>{ const out=[]; const rq=db.transaction('img').objectStore('img').openCursor(); rq.onsuccess=()=>{ const c=rq.result; if(c){ out.push([c.key,c.value]); c.continue(); } else res(out); }; rq.onerror=()=>rej(rq.error); }); }
+
 export async function startLocal(){
-  try{ for(const [k,b] of await idbAll()) IMG_URLS.set(k, URL.createObjectURL(b)); }catch(e){ console.warn('idb',e); }
-  S.mode='local';
   try{
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw){ const o = JSON.parse(raw);
-      S.settings = Object.assign(clone(DEFAULT_SETTINGS), o.settings||{});
-      S.problems = new Map(Object.entries(o.problems||{}).map(([k,v])=>{ v.course=fixCourse(v.course); v.topics=topicsOf(v); return [k,v]; })); }
-  }catch(e){ S.mode='memory'; }
+    CARNET = await openCarnet();
+    const mig = await migrateFromLocalStorage(CARNET, localStorage);
+    applyCarnet(await loadCarnet(CARNET));
+    S.mode='local';
+    if (mig.status==='corrupt') S.notice={kind:'err', text:'L’ancien carnet enregistré sur cet appareil était illisible. Rien n’a été effacé : son contenu brut est conservé. Restaure ta dernière sauvegarde (Réglages → Restaurer une sauvegarde).'};
+  }catch(e){
+    console.warn('carnet', e);
+    // La base est inaccessible : on montre quand même l'ancien carnet s'il existe, sans rien écrire.
+    CARNET=null; S.mode='memory';
+    try{ const legacy=readLegacy(localStorage); if(legacy) applyCarnet(legacy); }catch(_){}
+    S.notice={kind:'err', text:'Le stockage de l’appli est inaccessible (plein ou bloqué) : rien de ce que tu fais maintenant ne sera enregistré. Libère de la place puis relance l’appli.'};
+  }
   S.loaded = true; render();
 }
-export function persistLocal(){
-  if (S.mode!=='local') return S.mode==='memory';
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({settings:S.settings, problems:Object.fromEntries(S.problems)})); return true; }
-  catch(e){ toast('Impossible d’enregistrer sur cet appareil (stockage plein ou bloqué).','err'); return false; }
-}
-export const chains = {};
-export function queued(key, fn){
-  const run = async ()=>{ try{ return await fn(); }catch(e){ if(e && e.code==='unavailable'){ await sleep(400+Math.random()*600); return fn(); } throw e; } };
-  const next = (chains[key]||Promise.resolve()).catch(()=>{}).then(run);
-  chains[key] = next; return next;
-}
-export function dbFail(e){
-  const c = e && e.code;
-  if (c==='quota_exceeded') toast('Stockage plein — supprime ou archive quelques anciens problèmes.','err');
-  else if (c==='invalid_argument') toast('Ce problème est trop lourd (essaie une photo plus petite).','err');
-  else toast('Enregistrement impossible pour le moment ('+(c||'erreur')+'). Vérifie ta connexion.','err');
+
+function saveFail(e){
+  console.warn('enregistrement', e);
+  const full = e && (e.name==='QuotaExceededError' || /quota/i.test(String(e.message||'')));
+  toast(full ? 'Stockage plein : la modification n’a pas pu être enregistrée. Libère de la place.' : 'Enregistrement impossible sur cet appareil.','err');
   return false;
 }
 export async function saveSettings(){
-  if (S.mode==='cloud'){ const data = clone(S.settings); return queued('settings', ()=>S.settingsRef.set(data)).then(()=>true, dbFail); }
-  return persistLocal();
+  if (!CARNET) return S.mode==='memory';
+  return putSettings(CARNET, clone(S.settings)).then(()=>true, saveFail);
 }
 export async function saveProblem(p){
   S.problems.set(p.id, p);
-  if (S.mode==='cloud'){ const data = clone(p); return queued(p.id, ()=>S.col.doc(p.id).set(data)).then(()=>true, dbFail); }
-  return persistLocal();
+  if (!CARNET) return S.mode==='memory';
+  return putProblem(CARNET, clone(p)).then(()=>true, saveFail);
 }
 export async function removeProblem(p){
   S.problems.delete(p.id);
-  if (S.mode==='cloud'){
-    const ok = await queued(p.id, ()=>S.col.doc(p.id).delete()).then(()=>true, dbFail);
-    if (ok && S.assets) for (const k of ['problemImg','solutionImg','noteImg'])
-      if (p[k] && !p[k].startsWith('data:')) S.assets.delete(p[k]).catch(()=>{});
-    return ok;
-  }
-  for (const k of ['problemImg','solutionImg','noteImg']) if (p[k] && p[k].startsWith('idb:')){ idbDel(p[k]); IMG_URLS.delete(p[k]); }
-  return persistLocal();
+  for (const k of ['problemImg','solutionImg','noteImg']) if (p[k] && p[k].startsWith('idb:')){ idbDel(p[k]); const u=IMG_URLS.get(p[k]); if(u) URL.revokeObjectURL(u); IMG_URLS.delete(p[k]); }
+  if (!CARNET) return S.mode==='memory';
+  return deleteProblem(CARNET, p.id).then(()=>true, saveFail);
+}
+/* Réécrit tout le carnet d'un coup (une transaction : tout ou rien). */
+export async function persistAll(meta){
+  if (!CARNET) return S.mode==='memory';
+  return writeCarnet(CARNET, {problems:[...S.problems.values()].map(clone), settings:clone(S.settings)}, meta).then(()=>true, saveFail);
 }
 
+/* ---------- images du carnet (base « replay-images ») ---------- */
+export const IMG_URLS=new Map(); // référence -> URL d'objet, remplie à la demande
+let IMG_DB=null;
+export function idbOpen(){ if(!IMG_DB) IMG_DB=openDb(dbName('replay-images'),1,db=>{ db.createObjectStore('img'); }); return IMG_DB; }
+export async function idbPut(key,blob){ return tx(await idbOpen(),'img','readwrite',st=>{ st.put(blob,key); }); }
+export async function idbGet(key){ return tx(await idbOpen(),'img','readonly',st=>st.get(key)); }
+export async function idbKeys(){ return tx(await idbOpen(),'img','readonly',st=>st.getAllKeys()); }
+export async function idbDel(key){ try{ await tx(await idbOpen(),'img','readwrite',st=>{ st.delete(key); }); }catch(e){ console.warn('idb del',e); } }

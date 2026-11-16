@@ -1,6 +1,6 @@
 import { REASON_LABEL } from '../core/data.js';
 import { el, fmtDate, today } from '../core/helpers.js';
-import { imgSrc } from '../core/images.js';
+import { imgBlob } from '../core/images.js';
 import { S, activeProblems, topicsFor, topicsOf } from '../core/state.js';
 import { saveSettings } from '../core/storage.js';
 import { examMatches } from '../srs/schedule.js';
@@ -37,7 +37,7 @@ export function aiErrorText(e){
 }
 export async function refBlob(ref){
   if(!ref) return null;
-  try{ const r=await fetch(imgSrc(ref)); if(!r.ok) return null; const b=await r.blob(); return /^image\/(jpeg|png|webp|gif)/.test(b.type)?b:null; }catch(e){ return null; }
+  try{ const b=await imgBlob(ref); return b && /^image\/(jpeg|png|webp|gif)/.test(b.type)?b:null; }catch(e){ return null; }
 }
 /* returns {blobs, note} with a description of each attached image in order */
 export async function problemImages(p, withSolution){

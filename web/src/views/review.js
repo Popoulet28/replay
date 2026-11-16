@@ -1,7 +1,7 @@
 import { hintBox, verifyBox } from '../ai/claude.js';
 import { REASON_LABEL } from '../core/data.js';
 import { clone, el, fmtDate, fmtInterval, today } from '../core/helpers.js';
-import { imgSrc } from '../core/images.js';
+import { imgEl, imgSrc } from '../core/images.js';
 import { S, courseTag, topicsOf } from '../core/state.js';
 import { saveProblem, saveSettings } from '../core/storage.js';
 import { reviewXP, xpToast } from '../game/game.js';
@@ -38,7 +38,7 @@ export function viewReview(){
   card.append(el('div',{class:'row',style:{marginBottom:'10px'}},
     courseTag(p.course), topicsOf(p).map(t=>el('span',{class:'tag grey',text:t})), p.source?el('span',{class:'tag grey',text:p.source}):null,
     el('span',{class:'spacer'}), el('span',{class:'muted small',text:'ajouté le '+fmtDate(p.created)})));
-  if (p.problemImg) card.append(el('img',{class:'problem-img',src:imgSrc(p.problemImg),alt:'Énoncé',onclick:()=>viewImage(imgSrc(p.problemImg))}));
+  if (p.problemImg) card.append(imgEl({class:'problem-img',ref:p.problemImg,alt:'Énoncé',onclick:()=>viewImage(imgSrc(p.problemImg))}));
   if (p.problemText) card.append(mathText(p.problemText));
   if (!p.problemImg && !p.problemText) card.append(el('p',{class:'muted',text:'(Pas d’énoncé enregistré — regarde ta série : '+(p.source||'inconnue')+')'}));
   card.append(el('div',{class:'instr'}, quick
@@ -55,13 +55,13 @@ export function viewReview(){
     root.append(el('div',{class:'row',style:{justifyContent:'center'}}, el('button',{class:'btn primary big',text:'Voir la solution',onclick:()=>{ s.revealed=true; render(); }})));
   } else {
     const sol=el('div',{class:'card'}, el('h3',{text:'Solution'}));
-    if (p.solutionImg) sol.append(el('img',{class:'problem-img',src:imgSrc(p.solutionImg),alt:'Solution',onclick:()=>viewImage(imgSrc(p.solutionImg))}));
+    if (p.solutionImg) sol.append(imgEl({class:'problem-img',ref:p.solutionImg,alt:'Solution',onclick:()=>viewImage(imgSrc(p.solutionImg))}));
     if (p.solutionText) sol.append(mathText(p.solutionText));
     if (!p.solutionImg && !p.solutionText) sol.append(el('p',{class:'muted',text:'Pas de solution enregistrée — compare avec ton corrigé.'}));
     if ((p.reasons||[]).length || p.noteImg || p.noteText){
       sol.append(el('hr',{class:'sep'}), el('h3',{text:'La dernière fois, tu l’as raté parce que…'}));
       if ((p.reasons||[]).length) sol.append(el('div',{class:'row'}, p.reasons.map(r=>el('span',{class:'tag',text:REASON_LABEL[r]||r}))));
-      if (p.noteImg) sol.append(el('img',{class:'problem-img',style:{marginTop:'10px',maxHeight:'260px'},src:imgSrc(p.noteImg),alt:'Ta note',onclick:()=>viewImage(imgSrc(p.noteImg))}));
+      if (p.noteImg) sol.append(imgEl({class:'problem-img',style:{marginTop:'10px',maxHeight:'260px'},ref:p.noteImg,alt:'Ta note',onclick:()=>viewImage(imgSrc(p.noteImg))}));
       if (p.noteText) sol.append(mathText(p.noteText));
     }
     root.append(sol);

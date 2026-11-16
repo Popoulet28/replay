@@ -2,8 +2,8 @@ import { DEFAULT_COURSES, DEFAULT_SETTINGS } from './data.js';
 import { clone, el } from './helpers.js';
 
 /* ---------- state ---------- */
-export const S = { mode:'loading', db:null, assets:null, uid:null, settingsRef:null, col:null,
-  problems:new Map(), settings:clone(DEFAULT_SETTINGS), loaded:false, stale:false,
+export const S = { mode:'loading', notice:null,
+  problems:new Map(), settings:clone(DEFAULT_SETTINGS), loaded:false,
   view:'today', session:null, libFilter:'all' };
 
 export function courses(){ return Object.keys(DEFAULT_COURSES).concat(S.settings.extraCourses||[]); }
