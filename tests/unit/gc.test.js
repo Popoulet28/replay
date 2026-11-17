@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { keyTime, findOrphans, GC_MIN_AGE } from '../../web/src/core/gc.js';
+import { keyTime, findOrphans, GC_MIN_AGE } from '../../web/src/core/gc-keys.js';
 
 const key = (prefix, t) => prefix + ':p' + t.toString(36) + 'abcde';
 const now = Date.UTC(2026, 10, 16);

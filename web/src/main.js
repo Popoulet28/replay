@@ -38,8 +38,9 @@ import './views/cours.js';
 import { init } from './core/storage.js';
 import { S } from './core/state.js';
 import { NB } from './notes/store.js';
+import { collectGarbage } from './core/gc.js';
 
 // Accès pour le débogage et les tests de bout en bout.
-window.__replay = { S, NB };
+window.__replay = { S, NB, collectGarbage };
 
 init();
