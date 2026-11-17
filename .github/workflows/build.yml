@@ -65,8 +65,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Construire Revise.exe
-        shell: pwsh
-        run: ./revise/launcher/build.ps1
+        # Windows PowerShell 5.1, comme en local (le script utilise des API .NET Framework)
+        shell: powershell
+        run: .eviselauncheruild.ps1
       - uses: actions/upload-artifact@v5
         with:
           name: Revise-exe
