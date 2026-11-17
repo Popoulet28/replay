@@ -681,11 +681,11 @@ VIZ.phases = el => widget(el, {
     // diagramme de phase (schématique)
     g.view(0, 10, 0, 10, { l: 26, r: g.W - split + 16, b: 24, t: 20 }); g.axes('T', 'P', { noticks: true });
     const tri = [3, 2.2], cr = [8.2, 7.4];
-    g.path([[0, 0], [1.5, .7], tri], C.text, 2); g.path([tri, [3.25, 9.8]], C.text, 2);
+    g.path([[0, 0], [1.5, .7], tri], C.text, 2); g.path([tri, [2.75, 9.8]], C.text, 2); // pente négative : particularité de l'eau
     const vap = []; for (let i = 0; i <= 30; i++) { const t = i / 30; vap.push([tri[0] + (cr[0] - tri[0]) * t, tri[1] + (cr[1] - tri[1]) * t * t * .6 + (cr[1] - tri[1]) * t * .4]); } g.path(vap, C.text, 2);
     g.txt('solide', 1.4, 5.5, C.a, 'center', 0, 0, true); g.txt('liquide', 5, 6.1, C.g, 'center', 0, 0, true); g.txt('gaz', 6.8, 2, C.r, 'center', 0, 0, true);
     g.dot(tri[0], tri[1], C.b, 5); g.txt('point triple', tri[0], tri[1], C.b, 'left', 8, 12); g.dot(cr[0], cr[1], C.p, 5); g.txt('point critique C', cr[0], cr[1], C.p, 'right', -6, -8);
-    const Tn = T(v.Q), yy = 4.3, xx = 1 + (Tn + 20) / 140 * 7.5; g.seg(.4, yy, 9.6, yy, C.muted, 1, [3, 3]); g.txt('1 atm', 9.6, yy, C.muted, 'right', 0, -5); g.dot(Math.min(xx, 9.4), yy, C.text, 5);
+    const Tn = T(v.Q), yy = 4.3, xx = 2.93 + Tn * (5.87 - 2.93) / 100; // 0 °C et 100 °C tombent sur les frontières à 1 atm g.seg(.4, yy, 9.6, yy, C.muted, 1, [3, 3]); g.txt('1 atm', 9.6, yy, C.muted, 'right', 0, -5); g.dot(Math.min(xx, 9.4), yy, C.text, 5);
     // courbe de chauffage
     g.view(0, 3150, -30, 135, { l: split + 40, b: 24, t: 20 }); g.axes('Q (kJ)', 'T (°C)');
     g.path(seg, C.muted, 2); const done = seg.filter(s => s[0] < v.Q).concat([[v.Q, Tn]]); g.path(done, C.r, 3.5);

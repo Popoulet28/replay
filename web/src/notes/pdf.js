@@ -21,6 +21,8 @@ export function loadScriptLib(path, global){
 }
 export const PDFDOCS=new Map();
 export function pdfDocFor(key){
+  if(PDFDOCS.has(key)){ const p=PDFDOCS.get(key); PDFDOCS.delete(key); PDFDOCS.set(key,p); return p; }
+  while(PDFDOCS.size>=2){ const [k0,p0]=PDFDOCS.entries().next().value; PDFDOCS.delete(k0); p0.then(d=>d&&d.destroy&&d.destroy()).catch(()=>{}); }
   if(!PDFDOCS.has(key)) PDFDOCS.set(key,(async()=>{ const pdfjs=await loadPdfJs(); const b=await nbGet('blobs',key); return pdfjs.getDocument({data:new Uint8Array(await b.arrayBuffer())}).promise; })());
   return PDFDOCS.get(key);
 }

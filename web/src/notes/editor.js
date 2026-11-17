@@ -95,7 +95,7 @@ export function makeEditor(node, doc, focus){
   let hidden=null, needRender=true, raf=0, sharpT=0;
   let tool='pen', stampType='q';
   const hist=[], redoStack=[];
-  let dirty=false, viewDirty=false, saveT=null, closed=false, penSeen=false, lastPenUp=0;
+  let dirty=false, viewDirty=false, saveT=null, closed=false, penSeen=false, lastPenUp=0, lastPenAt=-1e9;
   let sel=null, textEd=null, laser=[], laserRaf=0, pop=null;
   const toW=(x,y)=>[(x-view.tx)/view.s,(y-view.ty)/view.s];
   const toS=(x,y)=>[x*view.s+view.tx,y*view.s+view.ty];
@@ -236,16 +236,22 @@ export function makeEditor(node, doc, focus){
     const p=pos(e), now=performance.now();
     if(e.pointerType==='touch'){
       if(act && act.ptype==='pen') return;
-      if(now-lastPenUp<350 && penSeen) return;
+      // stylet posé, en survol ou levé depuis peu : ce contact est la paume
+      if(penSeen && (now-lastPenUp<350 || now-lastPenAt<350)) return;
       touches.set(e.pointerId,{p, p0:p});
       if(!tap) tap={t0:now, max:0, moved:false};
+      if(touches.size>=2 && tap.t2==null) tap.t2=now;
       tap.max=Math.max(tap.max,touches.size);
       if(touches.size>=2){ if(act && act.ptype==='touch'){ cancelAct(); } startPinch(); return; }
       if(!P.finger || tool==='hand'){ gesture={type:'pan', id:e.pointerId, last:p}; return; }
     } else if(e.pointerType==='mouse' && (e.button===1||e.button===2||spaceDown)){ gesture={type:'pan', id:e.pointerId, last:p}; e.preventDefault(); return; }
     if(tool==='hand' && e.pointerType!=='pen'){ gesture={type:'pan', id:e.pointerId, last:p}; return; }
     if(act) return;
-    if(e.pointerType==='pen'){ penSeen=true; if(gesture && gesture.type==='pan') gesture=null; }
+    if(e.pointerType==='pen'){
+      penSeen=true; lastPenAt=performance.now();
+      // le stylet se pose pendant un défilement ou un pincement de la paume : on l'abandonne
+      if(gesture){ gesture=null; touches.clear(); tap=null; }
+    }
     let t=tool;
     if(e.pointerType==='pen' && P.penButton && ((e.buttons&32)||(e.buttons&2)||e.button===5||e.button===2)) t='eraser';
     startTool(e, p, t);
@@ -278,6 +284,7 @@ export function makeEditor(node, doc, focus){
     cur.pts=shapeToPts(sh, Math.max(0.45,ps/n)); cur.snapped=true; cur.pen=cur.tool==='hl'?cur.pen:'ball'; drawLive(); buzz(10);
   }
   function onMove(e, raw){
+    if(e.pointerType==='pen') lastPenAt=performance.now();
     const p=pos(e);
     if(touches.has(e.pointerId)){
       const t=touches.get(e.pointerId); t.p=p;
@@ -317,7 +324,7 @@ export function makeEditor(node, doc, focus){
       touches.delete(e.pointerId);
       if(gesture && gesture.type==='pinch'){ if(touches.size===1){ const t=[...touches.entries()][0]; gesture={type:'pan', id:t[0], last:t[1].p}; } else if(!touches.size) gesture=null; }
       else if(gesture && gesture.id===e.pointerId) gesture=null;
-      if(!touches.size && tap){ const quick=performance.now()-tap.t0<320 && !tap.moved; if(quick && P.gestures){ if(tap.max===2) undo(); else if(tap.max===3) redo(); } tap=null; }
+      if(!touches.size && tap){ const now2=performance.now(); const quick=now2-tap.t0<320 && !tap.moved && (tap.t2==null || tap.t2-tap.t0<150) && now2-lastPenAt>1000; if(quick && P.gestures){ if(tap.max===2) undo(); else if(tap.max===3) redo(); } tap=null; }
       if(!act || act.id!==e.pointerId) return;
     }
     if(gesture && gesture.id===e.pointerId){ gesture=null; return; }

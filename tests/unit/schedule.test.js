@@ -87,6 +87,13 @@ describe('file du jour', () => {
     expect(reviewedToday()).toBe(1);
     expect(todayQueue()).toHaveLength(1);
   });
+  it('les révisions en plus (bonus, refaire maintenant) ne consomment pas le quota', () => {
+    S.settings.dailyLimit = 1;
+    S.problems.set('a', prob('a', { history: [{ d: '2026-11-16', r: 'good', m: 'quick', x: 1 }], srs: { ...prob('a').srs, due: '2026-11-19', last: '2026-11-16' } }));
+    S.problems.set('b', prob('b', { srs: { ...prob('b').srs, due: '2026-11-15' } }));
+    expect(reviewedToday()).toBe(0);
+    expect(todayQueue().map(p => p.id)).toEqual(['b']);
+  });
   it('un contrôle proche relève la limite et fait passer ses thèmes en premier', () => {
     S.settings.dailyLimit = 1; S.settings.examLimit = 3; S.settings.boostDays = 7;
     S.settings.exams = [{ id: 'x', name: 'Contrôle 2', date: '2026-11-20', course: 'Mécanique I', topics: ['Gravitation & Kepler'] }];

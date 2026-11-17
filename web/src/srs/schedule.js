@@ -20,7 +20,7 @@ export function upcomingExams(withinDays){
 export function examMatches(ex, p){ return p.course===ex.course && (!ex.topics || !ex.topics.length || topicsOf(p).some(t=>ex.topics.includes(t))); }
 export function boostActive(){ return upcomingExams(S.settings.boostDays||7).length>0; }
 export function dailyLimit(){ return boostActive() ? Math.max(S.settings.examLimit||3, S.settings.dailyLimit||1) : (S.settings.dailyLimit||1); }
-export function reviewedToday(){ const t=today(); let n=0; for(const p of S.problems.values()) for(const h of (p.history||[])) if(h.d===t) n++; return n; }
+export function reviewedToday(){ const t=today(); let n=0; for(const p of S.problems.values()) for(const h of (p.history||[])) if(h.d===t && !h.x) n++; return n; }
 export function backlog(){
   const t=today(); const exams=upcomingExams(14);
   const items=[];

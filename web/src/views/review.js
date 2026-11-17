@@ -79,7 +79,8 @@ export function modeToggleSmall(){
 export async function rate(p, r){
   const s=S.session; const np=clone(p);
   np.srs = schedule(p, r);
-  np.history = (np.history||[]).concat([{d:today(), r, m:S.settings.reviewMode}]).slice(-60);
+  const h={d:today(), r, m:S.settings.reviewMode}; if(s.label!=='Aujourd’hui') h.x=1; // révision en plus de la file du jour
+  np.history = (np.history||[]).concat([h]);
   s.results.push(r); s.i++; s.revealed=false; xpToast(reviewXP({r, m:S.settings.reviewMode}), p.course);
   render(); window.scrollTo(0,0);
   await saveProblem(np);

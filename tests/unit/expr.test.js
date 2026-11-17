@@ -97,6 +97,10 @@ describe('nombres avec incertitude', () => {
     expect(fmtVU(6.674e-11, 1.5e-14).txt).toBe('(6.6740 ± 0.0015) × 10^-11');
     expect(fmtVU(123456, 0).txt).toBe('1.235 × 10^5');
   });
+  it('garde 2 chiffres significatifs sur une grande incertitude', () => {
+    expect(fmtVU(1234, 456).txt).toBe('(1230 ± 460)');
+    expect(fmtVU(9876, 123).txt).toBe('(9880 ± 120)');
+  });
   it('sans incertitude, garde 4 chiffres significatifs', () => {
     expect(fmtVU(3.14159, 0).txt).toBe('3.142');
   });
