@@ -9,7 +9,8 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:4173',
-    channel: process.env.PW_CHANNEL || 'chrome',
+    // en local : le Chrome installé ; en CI : le Chromium fourni par Playwright
+    channel: process.env.CI ? undefined : (process.env.PW_CHANNEL || 'chrome'),
     viewport: { width: 1280, height: 800 },
     hasTouch: true,
   },

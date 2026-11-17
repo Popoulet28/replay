@@ -1,43 +1,91 @@
-name: Construire l'APK
+name: Tester et construire
 
+# À chaque push : tests, puis APK et .exe en artefacts téléchargeables.
+# Une Release n'est publiée que pour un tag de version (git tag v5 && git push --tags).
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'phase-*' ]
+    tags: [ 'v*' ]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Linter
+        run: npm run lint
+      - name: Tests unitaires
+        run: npm test
+      - name: Tests de bout en bout
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
 
+  apk:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Construire
+      - name: Construire l'application web
+        run: |
+          npm ci
+          npm run build
+      - name: Construire l'APK
         run: |
           chmod +x gradlew
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           ./gradlew assembleRelease --no-daemon --stacktrace
-
-      - name: Renommer
-        run: cp app/build/outputs/apk/release/app-release.apk Replay.apk
-
+          cp app/build/outputs/apk/release/app-release.apk Replay.apk
       - uses: actions/upload-artifact@v5
         with:
           name: Replay-apk
           path: Replay.apk
 
+  exe:
+    needs: test
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+      - name: Construire Revise.exe
+        shell: pwsh
+        run: ./revise/launcher/build.ps1
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Revise-exe
+          path: revise/Revise.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [apk, exe]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          merge-multiple: true
       - name: Publier la version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ github.run_number }}" Replay.apk \
-            --title "Replay ${{ github.run_number }}" \
-            --notes "Télécharge Replay.apk et installe-le sur ta tablette." \
+          gh release create "${{ github.ref_name }}" Replay.apk Revise.exe \
+            --repo "${{ github.repository }}" \
+            --title "Replay ${{ github.ref_name }}" \
+            --notes "Télécharge Replay.apk et installe-le sur ta tablette par-dessus l'ancienne version : tes données sont conservées." \
             --latest

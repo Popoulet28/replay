@@ -1,34 +1,65 @@
-# Replay pour Android
+# Replay
 
-Ce dossier contient tout le nécessaire pour fabriquer **Replay.apk**, l'application à installer sur ta tablette.
-GitHub la construit gratuitement à ta place : tu n'as rien à installer sur ton ordinateur.
+Cours au stylet, carnet d'erreurs avec répétition espacée et, bientôt, leçons de physique (fusion avec « Révise »).
+Une seule base de code web, affichée dans une WebView Android (APK) et dans WebView2 sous Windows (.exe).
 
-## 1. Mettre le projet sur GitHub (une seule fois)
+Voir [AUDIT.md](AUDIT.md) (état des lieux) et [PLAN.md](PLAN.md) (phases).
 
-1. Crée un compte gratuit sur https://github.com (si tu n'en as pas).
-2. En haut à droite : **+** → **New repository**. Nom : `replay`. Laisse-le **Public**. Ne coche rien d'autre. **Create repository**.
-3. Sur la page qui s'affiche, clique **uploading an existing file**.
-4. Glisse **tout le contenu** de ce dossier (y compris le dossier `.github`) dans la page, puis **Commit changes**.
+## Installer sur la tablette
 
-## 2. Attendre la construction (~5 minutes)
+1. Sur GitHub, onglet **Actions** : chaque push construit `Replay.apk` (artefact « Replay-apk »).
+   Les versions publiques (onglet **Releases**) ne sont créées que pour un tag : `git tag v5 && git push --tags`.
+2. Installe l'APK **par-dessus** l'ancienne version : même identifiant, même signature, tes données sont reprises.
+   À la première ouverture, l'ancien carnet est copié dans la nouvelle base ; l'original n'est pas effacé.
 
-- Onglet **Actions** : la construction « Construire l'APK » tourne. Une coche verte = c'est prêt.
-- Si c'est une croix rouge, ouvre-la et envoie une capture à Claude.
+## Tes données
 
-## 3. Installer sur la tablette
+- Tout reste sur l'appareil (IndexedDB). Rien n'est envoyé sur Internet.
+- **Sauvegarde automatique** (Android) dans `Téléchargements/Replay`, chaque semaine par défaut ; les 2 dernières sont gardées. Réglable dans *Réglages → Tes données*.
+- **Restaurer** une sauvegarde ne touche jamais aux données en place : la sauvegarde est vérifiée, copiée à côté, puis activée. Les données d'avant restent récupérables (*Revenir à ces données*) jusqu'à ce que tu libères la place.
+- Désinstaller l'appli efface ses données, mais pas les sauvegardes de Téléchargements.
 
-1. Sur la tablette, ouvre `https://github.com/TON-PSEUDO/replay/releases/latest`.
-2. Touche **Replay.apk** pour le télécharger.
-3. Ouvre le fichier téléchargé. Android te demande d'autoriser Chrome à installer des applications : accepte, puis **Installer**.
+## Développer
 
-## Mettre à jour plus tard
+Prérequis : Node 18 ou plus. Pour l'APK : JDK 17 et le SDK Android (ou laisser la CI le faire).
 
-Remplace `app/src/main/assets/www/index.html` sur GitHub par la nouvelle version (**Add file → Upload files**).
-Une nouvelle version apparaît dans **Releases** ; installe-la par-dessus : tes données sont conservées.
+```bash
+npm install
+```
 
-## À savoir
+```bash
+npm run dev
+```
+Construit l'appli et la sert sur http://localhost:4173 (à ouvrir dans Chrome).
 
-- Tes problèmes et photos restent **sur la tablette**. Fais une sauvegarde de temps en temps (**Réglages → Exporter une sauvegarde**) : désinstaller l'app efface tout.
-- Les boutons Claude (indice, vérification, fiche de révision) ne sont disponibles que dans la version web sur claude.ai.
-- Les formules ($...$) et les polices s'affichent mieux quand la tablette a internet.
-- Le fichier `app/replay.keystore` signe l'app : garde-le, sinon les mises à jour devront être installées après une désinstallation.
+```bash
+npm run check
+```
+Linter, tests unitaires (Vitest) et tests de bout en bout (Playwright, dans Chrome).
+
+```bash
+npm run build
+```
+Écrit l'appli dans `app/src/main/assets/www` (dossier généré, non versionné), puis `./gradlew assembleRelease` produit l'APK.
+
+### Organisation
+
+| Dossier | Contenu |
+|---|---|
+| `web/src/core` | état, stockage (IndexedDB, générations), sauvegarde zip, nettoyage, dates |
+| `web/src/srs` | planification des révisions et file du jour |
+| `web/src/notes` | moteur d'encre, éditeur, PDF, fichiers des notes |
+| `web/src/views` | écrans (Aujourd'hui, Carnet, Cours, Agenda, Réglages…) |
+| `web/src/tools` | vérificateur d'unités, incertitudes, ajustement linéaire |
+| `web/public/lib` | pdf.js et pdf-lib (copiés tels quels) |
+| `revise/` | l'appli Révise d'origine et son lanceur Windows, en attendant la fusion (phase 1) |
+| `app/` | coquille Android (`MainActivity.java` : WebView + pont pour enregistrer des fichiers) |
+| `tests/unit`, `tests/e2e` | tests |
+
+### Windows
+
+`revise/launcher/build.ps1` compile `revise/Revise.exe` avec le compilateur C# fourni par Windows (aucune installation). La CI le fait aussi. Le .exe de l'appli fusionnée arrive en phase 1.
+
+## Sécurité
+
+La clé de signature `app/replay.keystore` et son mot de passe sont publics dans ce dépôt (voir AUDIT.md, S1). Ils sont gardés pour que les mises à jour s'installent par-dessus ; leur remplacement est prévu en phase 6.
